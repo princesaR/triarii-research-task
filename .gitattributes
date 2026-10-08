@@ -2,3 +2,6 @@
 # where a Windows CRLF breaks them (e.g. "/bin/sh^M: not found").
 * text=auto eol=lf
 *.png binary
+# Shell scripts run inside the Linux VM: keep LF line endings even when committed from Windows.
+*.sh text eol=lf
+Vagrantfile text eol=lf
