@@ -1,11 +1,3 @@
-# CI/CD for RF Alert Manager.
-#
-#   PR / push        -> lint + test (make this check required in branch protection)
-#   push to main     -> lint + test -> build both images, tag :<sha>, push to GHCR -> deploy -> smoke
-#   workflow_dispatch with `sha` -> rollback: deploy that already-built SHA (no rebuild) -> smoke
-#
-# Deploy runs on the self-hosted runner inside the VM (label rfam-vm), so the VM needs no
-# inbound access. Repo secrets needed: POSTGRES_PASSWORD, INGEST_DB_PASSWORD, ALERTS_DB_PASSWORD.
 
 name: pipeline
 
