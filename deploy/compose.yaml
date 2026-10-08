@@ -1,9 +1,9 @@
 # RF Alert Manager: runtime stack.
-# For now Postgres only; Kafka, the two services and Nginx are added next.
+# For now Postgres and Kafka; the two services and Nginx are added in Part 2.
 #
 #   cp deploy/.env.example deploy/.env   # then set real passwords
 #   docker compose -f deploy/compose.yaml up -d
-#   docker compose -f deploy/compose.yaml logs -f postgres
+#   docker compose -f deploy/compose.yaml logs -f postgres kafka
 
 name: rfam
 
@@ -28,5 +28,65 @@ services:
       timeout: 5s
       retries: 12
 
+  kafka:
+    image: apache/kafka:4.0.0
+    restart: unless-stopped
+    environment:
+      # Single node in KRaft mode: this process is both broker and controller (no Zookeeper).
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: rfam-kraft-cluster-01a  # fixed, so the data volume stays valid across restarts
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # INTERNAL: other containers (kafka:9092). EXTERNAL: tools on the host (127.0.0.1:9094).
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://127.0.0.1:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # One broker: internal topics cannot be replicated.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Topics are created explicitly by kafka-init; a typo must fail, not create a topic.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m  # shares a small VM with Postgres and the services
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      - "127.0.0.1:9094:9094"  # host access for local runs only; never exposed publicly
+    healthcheck:
+      # The check is a JVM tool: give it a small heap of its own (it would otherwise inherit
+      # KAFKA_HEAP_OPTS) and enough time, or it flaps to "unhealthy" on a busy host.
+      test: ["CMD-SHELL", "KAFKA_HEAP_OPTS=-Xmx64m /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+
+  # One-shot job: create the topics, then exit. Safe to re-run (--if-not-exists).
+  kafka-init:
+    image: apache/kafka:4.0.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        topics=/opt/kafka/bin/kafka-topics.sh
+        # 3 partitions keyed by rule_id|signal_key: per-signal order, room for 3 consumers.
+        $$topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic rf.rule-matches --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
+        # Dead letters: messages the alert service can never process (bad JSON/schema).
+        $$topics --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic rf.rule-matches.dlq --partitions 1 --replication-factor 1 \
+          --config retention.ms=2592000000
+        $$topics --bootstrap-server kafka:9092 --describe --topic rf.rule-matches
+    restart: "no"
+
 volumes:
   postgres-data:
+  kafka-data:
