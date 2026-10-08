@@ -12,7 +12,7 @@ select = ["E", "F", "I", "B", "UP"]
 ignore = ["B008"]  # FastAPI uses function calls in argument defaults (Query/Depends)
 
 [tool.ruff.lint.isort]
-known-first-party = ["models", "rfam_common", "ingest", "alerts"]
+known-first-party = ["db", "models", "rfam_common", "ingest", "alerts"]
 
 [tool.pytest.ini_options]
 # Each service is its own top-level package; the shared package sits next to them.

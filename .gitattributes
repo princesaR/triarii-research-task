@@ -1,0 +1,4 @@
+# Normalize to LF in the repo. Scripts and configs run inside Linux containers,
+# where a Windows CRLF breaks them (e.g. "/bin/sh^M: not found").
+* text=auto eol=lf
+*.png binary

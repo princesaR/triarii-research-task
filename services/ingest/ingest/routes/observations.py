@@ -5,9 +5,9 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query, Response
 from sqlalchemy import select
 
+from db.ingest import Observation
 from ingest import pipeline
 from ingest.deps import CtxDep, SessionDep
-from ingest.models import Observation
 from models import BatchResult, ObservationOut
 from rfam_common.kafka import PublishError
 

@@ -9,10 +9,10 @@ from fastapi import Depends, Request
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from db.ingest import Rule
 from ingest import rules as rules_repo
 from ingest.engine import RuleEngine
 from ingest.metrics import Metrics
-from ingest.models import Rule
 from ingest.settings import IngestSettings
 
 

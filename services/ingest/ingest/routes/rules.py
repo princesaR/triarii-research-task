@@ -4,9 +4,9 @@ so new thresholds never mix with persistence measured under the old ones."""
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.orm import Session
 
+from db.ingest import Rule
 from ingest import rules as rules_repo
 from ingest.deps import CtxDep, SessionDep
-from ingest.models import Rule
 from models import RuleIn, RuleOut, RuleUpdate
 
 router = APIRouter(prefix="/api/v1/rules", tags=["rules"])

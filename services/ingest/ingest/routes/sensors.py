@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 from sqlalchemy import select
 
+from db.ingest import Sensor
 from ingest.deps import SessionDep
-from ingest.models import Sensor
 from models import SensorOut
 
 router = APIRouter(prefix="/api/v1/sensors", tags=["sensors"])

@@ -59,7 +59,7 @@ def test_rule_update_rejects_explicit_null():
 def test_out_models_build_from_db_rows():
     from datetime import UTC, datetime
 
-    from ingest.models import Observation, Rule, Sensor
+    from db.ingest import Observation, Rule, Sensor
     from models import ObservationOut, RuleOut, SensorOut
 
     ts = datetime(2026, 10, 6, 10, 0, tzinfo=UTC)

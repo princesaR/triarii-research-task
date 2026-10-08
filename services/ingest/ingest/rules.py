@@ -8,7 +8,7 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ingest.models import Rule
+from db.ingest import Rule
 from models import RuleIn, RuleUpdate
 
 log = logging.getLogger(__name__)

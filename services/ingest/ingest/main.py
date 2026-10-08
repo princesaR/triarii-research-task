@@ -8,11 +8,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from db.ingest import Base
 from ingest import rules as rules_repo
 from ingest.deps import IngestContext
 from ingest.engine import RuleEngine
 from ingest.metrics import Metrics
-from ingest.models import Base
 from ingest.routes import observations, ops, rules, sensors
 from ingest.settings import IngestSettings
 from rfam_common.db import make_engine, make_session_factory

@@ -3,8 +3,8 @@
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from db.ingest import Observation, Rule, Sensor
 from ingest.engine import RuleEngine
-from ingest.models import Observation, Rule, Sensor
 from models import FieldError, MatchedObservation, ObservationIn, RejectedItem, RuleMatchEvent
 
 
