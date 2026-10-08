@@ -3,6 +3,7 @@
 Import from the package: `from models import RuleIn, ObservationOut`.
 """
 
+from models.alert import AlertDetail, AlertObservationOut, AlertOut, AlertState
 from models.enums import Severity
 from models.health import Health
 from models.location import Location
@@ -19,6 +20,10 @@ from models.sensor import SensorOut
 
 __all__ = [
     "TOPIC",
+    "AlertDetail",
+    "AlertObservationOut",
+    "AlertOut",
+    "AlertState",
     "Band",
     "BatchResult",
     "FieldError",
