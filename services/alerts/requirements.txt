@@ -1,0 +1,7 @@
+fastapi==0.142.4
+uvicorn[standard]==0.53.0
+pydantic==2.13.5
+SQLAlchemy==2.1.4
+psycopg[binary]==3.2.13
+prometheus-client==0.26.0
+confluent-kafka==2.15.1
