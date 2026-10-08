@@ -48,6 +48,12 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Sized for one small VM, not a cluster. Defaults are 50 partitions for each internal
+      # topic (slow to load on every start) and thread pools meant for a big server.
+      KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: 1
+      KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS: 1
+      KAFKA_NUM_NETWORK_THREADS: 2
+      KAFKA_NUM_IO_THREADS: 2
       # Topics are created explicitly by kafka-init; a typo must fail, not create a topic.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_LOG_DIRS: /var/lib/kafka/data
@@ -57,15 +63,15 @@ services:
     ports:
       - "127.0.0.1:9094:9094"  # host access for local runs only; never exposed publicly
     healthcheck:
-      # The check is a JVM tool: give it a small heap of its own (it would otherwise inherit
-      # KAFKA_HEAP_OPTS) and enough time, or it flaps to "unhealthy" on a busy host.
-      test: ["CMD-SHELL", "KAFKA_HEAP_OPTS=-Xmx64m /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
-      interval: 15s
-      timeout: 30s
+      # A plain TCP connect to the broker port. The Kafka CLI tools start a whole JVM per
+      # check, which costs seconds of CPU every interval on a small host.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9092"]
+      interval: 10s
+      timeout: 5s
       retries: 12
       start_period: 20s
 
-  # One-shot job: create the topics, then exit. Safe to re-run (--if-not-exists).
+  # One-shot job: create the topic, then exit. Safe to re-run (--if-not-exists).
   kafka-init:
     image: apache/kafka:4.0.0
     depends_on:
@@ -76,14 +82,10 @@ services:
       - |
         set -e
         topics=/opt/kafka/bin/kafka-topics.sh
-        # 3 partitions keyed by rule_id|signal_key: per-signal order, room for 3 consumers.
+        # 2 partitions keyed by rule_id|signal_key: per-signal order, room for 2 consumers.
         $$topics --bootstrap-server kafka:9092 --create --if-not-exists \
-          --topic rf.rule-matches --partitions 3 --replication-factor 1 \
+          --topic rf.rule-matches --partitions 2 --replication-factor 1 \
           --config retention.ms=604800000
-        # Dead letters: messages the alert service can never process (bad JSON/schema).
-        $$topics --bootstrap-server kafka:9092 --create --if-not-exists \
-          --topic rf.rule-matches.dlq --partitions 1 --replication-factor 1 \
-          --config retention.ms=2592000000
         $$topics --bootstrap-server kafka:9092 --describe --topic rf.rule-matches
     restart: "no"
 

@@ -7,13 +7,13 @@ import time
 from collections.abc import Callable
 
 from confluent_kafka import Consumer, KafkaError, KafkaException, Message, Producer
+from confluent_kafka.admin import AdminClient
 from pydantic import ValidationError
 
 from models import TOPIC, RuleMatchEvent
 
 log = logging.getLogger(__name__)
 
-DLQ_TOPIC = f"{TOPIC}.dlq"
 Handler = Callable[[RuleMatchEvent], None]
 
 
@@ -95,15 +95,16 @@ class KafkaConsumerLoop:
     A crash between the DB commit and the offset commit redelivers the message, so
     the handler must be idempotent (the alert service uses a unique constraint).
 
-    - Bad message (not JSON / wrong schema): it can never succeed, so it goes to the
-      dead-letter topic and its offset is committed. It must not block the partition.
+    - Bad message (not JSON / wrong schema): it can never succeed, so it is logged
+      (with topic/partition/offset and payload) and its offset committed. It must not
+      block the partition. No dead-letter topic, to keep Kafka small: the log line is
+      the only record of it.
     - Handler error (e.g. DB down): retried with backoff, offset not committed.
     """
 
     def __init__(self, bootstrap: str, group_id: str, handler: Handler,
-                 topic: str = TOPIC, dlq_topic: str = DLQ_TOPIC,
-                 offset_reset: str = "earliest"):
-        self.topic, self.dlq_topic, self.handler = topic, dlq_topic, handler
+                 topic: str = TOPIC, offset_reset: str = "earliest"):
+        self.topic, self.handler = topic, handler
         self._consumer = Consumer({
             "bootstrap.servers": bootstrap,
             "group.id": group_id,
@@ -111,11 +112,13 @@ class KafkaConsumerLoop:
             # Where a *new* group starts: the alert service wants every message ("earliest").
             "auto.offset.reset": offset_reset,
         })
-        self._dlq = Producer({"bootstrap.servers": bootstrap, "acks": "all"})
+        # For ping() only: unlike the consumer, the admin client is safe to use from
+        # another thread (the /health endpoint).
+        self._admin = AdminClient({"bootstrap.servers": bootstrap})
         self._stop = threading.Event()
         self.last_poll: float = 0.0  # for /health: proves the loop is alive
         self.processed = 0
-        self.dead_lettered = 0
+        self.skipped = 0
 
     def run(self) -> None:
         """Blocking loop; run it in a thread and call stop() to end it."""
@@ -139,8 +142,11 @@ class KafkaConsumerLoop:
         try:
             event = RuleMatchEvent.model_validate_json(msg.value())
         except ValidationError as e:
-            self._dead_letter(msg, str(e))
+            log.error("skipping bad message %s/%s/%s: %s | payload=%r", msg.topic(),
+                      msg.partition(), msg.offset(), str(e).splitlines()[0],
+                      (msg.value() or b"")[:500])
             self._consumer.commit(message=msg, asynchronous=False)
+            self.skipped += 1
             return
 
         delay = 1.0
@@ -158,21 +164,12 @@ class KafkaConsumerLoop:
         self._consumer.commit(message=msg, asynchronous=False)
         self.processed += 1
 
-    def _dead_letter(self, msg: Message, reason: str) -> None:
-        log.error("dead-lettering offset %s: %s", msg.offset(), reason.splitlines()[0])
-        self._dlq.produce(self.dlq_topic, key=msg.key(), value=msg.value(),
-                          headers={"error": reason[:1000],
-                                   "source": f"{msg.topic()}/{msg.partition()}/{msg.offset()}"})
-        self._dlq.flush(10)
-        self.dead_lettered += 1
-
     def stop(self) -> None:
         self._stop.set()
 
     def ping(self) -> bool:
-        # Via the producer: unlike the consumer, it is safe to use from another thread.
         try:
-            self._dlq.list_topics(timeout=2)
+            self._admin.list_topics(timeout=2)
             return True
         except Exception:
             return False
